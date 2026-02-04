@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useState, useRef, useEffect } from "react";
 import { DownloadCsv } from "./DownloadCsv";
 import { OmUpdateModal } from "./OmUpdateModal";
 import type { OemReturn } from "@/lib/types";
 
-const STATUS_OPTIONS = ["Open", "In Progress", "Inprogress", "Closed"] as const;
+const STATUS_OPTIONS = ["Open", "In Progress", "Closed"] as const;
 
 const COLS = [
   { key: "ticket_link", label: "Ticket link" },
@@ -74,6 +74,26 @@ export function ReturnsTable({
   const [omUpdateRow, setOmUpdateRow] = useState<OemReturn | null>(null);
   const [statusUpdating, setStatusUpdating] = useState<string | null>(null);
   const [agentUpdating, setAgentUpdating] = useState<string | null>(null);
+  
+  // Column width state - default widths for each column
+  const defaultWidths: Record<string, number> = {
+    ticket_link: 140,
+    order_number: 120,
+    sku: 120,
+    customer_name: 160,
+    priority: 100,
+    om_request: 250,
+    status: 130,
+    om_update: 200,
+    last_follow_up: 140,
+    request_date: 120,
+    designated_om_agent: 180,
+  };
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>(defaultWidths);
+  const [resizingColumn, setResizingColumn] = useState<string | null>(null);
+  const resizeStartX = useRef<number>(0);
+  const resizeStartWidth = useRef<number>(0);
+  
   const totalPages = Math.max(1, Math.ceil(total / limit));
   const from = total === 0 ? 0 : (page - 1) * limit + 1;
   const to = Math.min(page * limit, total);
@@ -129,6 +149,44 @@ export function ReturnsTable({
     },
     [onUpdate]
   );
+
+  const handleResizeStart = useCallback((columnKey: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    setResizingColumn(columnKey);
+    resizeStartX.current = e.clientX;
+    resizeStartWidth.current = columnWidths[columnKey];
+  }, [columnWidths]);
+
+  useEffect(() => {
+    const handleResizeMove = (e: MouseEvent) => {
+      if (!resizingColumn) return;
+      
+      const diff = e.clientX - resizeStartX.current;
+      const newWidth = Math.max(50, resizeStartWidth.current + diff);
+      setColumnWidths(prev => ({
+        ...prev,
+        [resizingColumn]: newWidth,
+      }));
+    };
+
+    const handleResizeEnd = () => {
+      setResizingColumn(null);
+    };
+
+    if (resizingColumn) {
+      document.addEventListener("mousemove", handleResizeMove);
+      document.addEventListener("mouseup", handleResizeEnd);
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+    }
+
+    return () => {
+      document.removeEventListener("mousemove", handleResizeMove);
+      document.removeEventListener("mouseup", handleResizeEnd);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+  }, [resizingColumn]);
 
   if (loading) {
     return (
@@ -212,18 +270,31 @@ export function ReturnsTable({
         </div>
 
         <div className="table-wrap overflow-x-auto p-4">
-          <table className="w-full border-collapse text-left text-sm">
+          <table className="w-full border-collapse text-left text-sm" style={{ tableLayout: "fixed" }}>
             <thead>
               <tr className="border-b border-slate-600">
-                {COLS.map(({ key, label }) => (
+                {COLS.map(({ key, label }, index) => (
                   <th
                     key={key}
-                    className="cursor-pointer whitespace-nowrap py-3 pr-4 font-medium text-slate-400 hover:text-cyan-400"
+                    style={{ width: columnWidths[key], minWidth: 50 }}
+                    className="relative cursor-pointer whitespace-nowrap py-3 pr-4 font-medium text-slate-400 hover:text-cyan-400"
                     onClick={() => handleSort(key)}
                   >
-                    {label}
-                    {sortBy === key && (
-                      <span className="ml-1">{sortOrder === "asc" ? "↑" : "↓"}</span>
+                    <div className="flex items-center pr-1">
+                      <span>{label}</span>
+                      {sortBy === key && (
+                        <span className="ml-1">{sortOrder === "asc" ? "↑" : "↓"}</span>
+                      )}
+                    </div>
+                    {index < COLS.length - 1 && (
+                      <div
+                        className="absolute right-0 top-0 h-full w-1 cursor-col-resize bg-transparent hover:bg-cyan-500/50 transition-colors z-10"
+                        onMouseDown={(e) => {
+                          e.stopPropagation();
+                          handleResizeStart(key, e);
+                        }}
+                        style={{ width: "4px", marginRight: "-4px" }}
+                      />
                     )}
                   </th>
                 ))}
@@ -242,32 +313,32 @@ export function ReturnsTable({
                     key={row.ticket_link + String(i)}
                     className="border-b border-slate-700/80 hover:bg-slate-700/40"
                   >
-                    <td className="max-w-[140px] truncate py-2 pr-4 text-slate-200">
+                    <td style={{ width: columnWidths.ticket_link }} className="truncate py-2 pr-4 text-slate-200">
                       {formatCell(row.ticket_link)}
                     </td>
-                    <td className="max-w-[120px] truncate py-2 pr-4 text-slate-200">
+                    <td style={{ width: columnWidths.order_number }} className="truncate py-2 pr-4 text-slate-200">
                       {formatCell(row.order_number)}
                     </td>
-                    <td className="max-w-[120px] truncate py-2 pr-4 text-slate-200">
+                    <td style={{ width: columnWidths.sku }} className="truncate py-2 pr-4 text-slate-200">
                       {formatCell(row.sku)}
                     </td>
-                    <td className="max-w-[160px] truncate py-2 pr-4 text-slate-200">
+                    <td style={{ width: columnWidths.customer_name }} className="truncate py-2 pr-4 text-slate-200">
                       {formatCell(row.customer_name)}
                     </td>
-                    <td className="max-w-[100px] truncate py-2 pr-4 text-slate-200">
+                    <td style={{ width: columnWidths.priority }} className="truncate py-2 pr-4 text-slate-200">
                       {formatCell(row.priority)}
                     </td>
-                    <td className="max-w-[180px] truncate py-2 pr-4 text-slate-200">
+                    <td style={{ width: columnWidths.om_request }} className="py-2 pr-4 text-slate-200 break-words whitespace-normal">
                       {formatCell(row.om_request)}
                     </td>
-                    <td className="py-2 pr-4">
+                    <td style={{ width: columnWidths.status }} className="py-2 pr-4">
                       <select
                         value={row.status || ""}
                         onChange={(e) =>
                           handleStatusChange(row.ticket_link, e.target.value)
                         }
                         disabled={statusUpdating === row.ticket_link}
-                        className="min-w-[110px] rounded border border-slate-600 bg-slate-900 px-2 py-1.5 text-slate-200 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500 disabled:opacity-50"
+                        className="w-full rounded border border-slate-600 bg-slate-900 px-2 py-1.5 text-slate-200 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500 disabled:opacity-50"
                       >
                         {STATUS_OPTIONS.map((s) => (
                           <option key={s} value={s}>
@@ -276,7 +347,7 @@ export function ReturnsTable({
                         ))}
                       </select>
                     </td>
-                    <td className="max-w-[200px] py-2 pr-4">
+                    <td style={{ width: columnWidths.om_update }} className="py-2 pr-4">
                       <span className="block truncate text-slate-200">
                         {formatCell(row.om_update) === "—"
                           ? "—"
@@ -291,13 +362,13 @@ export function ReturnsTable({
                         Edit
                       </button>
                     </td>
-                    <td className="max-w-[140px] py-2 pr-4 text-slate-400 text-xs">
+                    <td style={{ width: columnWidths.last_follow_up }} className="py-2 pr-4 text-slate-400 text-xs">
                       {formatTimestamp(row.last_follow_up)}
                     </td>
-                    <td className="max-w-[120px] truncate py-2 pr-4 text-slate-200">
+                    <td style={{ width: columnWidths.request_date }} className="truncate py-2 pr-4 text-slate-200">
                       {formatCell(row.request_date)}
                     </td>
-                    <td className="min-w-[140px] py-2 pr-4">
+                    <td style={{ width: columnWidths.designated_om_agent }} className="py-2 pr-4">
                       <input
                         type="text"
                         defaultValue={formatCell(row.designated_om_agent) === "—" ? "" : formatCell(row.designated_om_agent)}
@@ -306,7 +377,7 @@ export function ReturnsTable({
                           handleDesignatedAgentBlur(row.ticket_link, e.target.value)
                         }
                         disabled={agentUpdating === row.ticket_link}
-                        className="w-full min-w-[120px] rounded border border-slate-600 bg-slate-900 px-2 py-1.5 text-slate-200 placeholder-slate-500 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500 disabled:opacity-50"
+                        className="w-full rounded border border-slate-600 bg-slate-900 px-2 py-1.5 text-slate-200 placeholder-slate-500 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500 disabled:opacity-50"
                       />
                     </td>
                   </tr>

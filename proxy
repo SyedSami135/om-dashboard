@@ -1,0 +1,132 @@
+<VirtualHost _:80>
+ServerName erp.nysonik.com
+DocumentRoot /var/www/html
+</VirtualHost>
+
+<VirtualHost *:80>
+    ServerName om-dashboard.nysonik.com
+    ProxyPreserveHost On
+    ProxyPass        / http://127.0.0.1:3008/
+    ProxyPassReverse / http://127.0.0.1:3008/
+    ErrorLog /var/log/httpd/om-dashboard_error.log
+    CustomLog /var/log/httpd/om-dashboard_access.log combined
+</VirtualHost>
+
+<VirtualHost _:80>
+ServerName automation-keeper.nysonik.com
+
+    ProxyPreserveHost On
+    ProxyPass        / http://127.0.0.1:3007/
+    ProxyPassReverse / http://127.0.0.1:3007/
+
+ErrorLog /var/log/httpd/automation-keeper_error.log
+CustomLog /var/log/httpd/automation-keeper_access.log combined
+</VirtualHost>
+
+
+<VirtualHost \*:80>
+ServerName nysonik.com
+ServerAlias www.nysonik.com
+ProxyPreserveHost On
+
+    # WebSocket/Socket.IO - MUST come first (before /api/)
+    ProxyPass /socket.io/ http://127.0.0.1:5000/socket.io/
+    ProxyPassReverse /socket.io/ http://127.0.0.1:5000/socket.io/
+
+    # WebSocket upgrade support
+    RewriteEngine on
+    RewriteCond %{HTTP:Upgrade} websocket [NC]
+    RewriteCond %{HTTP:Connection} upgrade [NC]
+    RewriteRule ^/socket.io/(.*) ws://127.0.0.1:5000/socket.io/$1 [P,L]
+
+# ===== Ops Dashboards (port 4011) =====
+
+# Ops Dashboards API (must come before /api/ -> 5000)
+
+ProxyPass /api/ops/dashboards/ http://127.0.0.1:4011/api/ops/dashboards/
+ProxyPassReverse /api/ops/dashboards/ http://127.0.0.1:4011/api/ops/dashboards/
+ProxyPass /api/invoice-cost http://127.0.0.1:4011/api/invoice-cost
+ProxyPassReverse /api/invoice-cost http://127.0.0.1:4011/api/invoice-cost
+
+# Ops Dashboards assets (must be before /automation/ops/dashboards/)
+
+ProxyPass /automation/ops/dashboards/\_next/ http://127.0.0.1:4011/_next/
+ProxyPassReverse /automation/ops/dashboards/\_next/ http://127.0.0.1:4011/_next/
+
+# Ops Dashboards pages
+
+ProxyPass /automation/ops/dashboards/ http://127.0.0.1:4011/automation/ops/dashboards/
+ProxyPassReverse /automation/ops/dashboards/ http://127.0.0.1:4011/automation/ops/dashboards/
+RedirectMatch 301 ^/automation/ops/dashboards$ /automation/ops/dashboards/
+
+# ===== End Ops Dashboards =====
+
+    # API routes
+    ProxyPass /api/ http://127.0.0.1:5000/api/
+    ProxyPassReverse /api/ http://127.0.0.1:5000/api/
+
+    # Warehouse Dashboard (these handle their own /_next/ requests via full path proxy)
+    ProxyPass /automation/ops/warehouse/vegas/outbound http://127.0.0.1:4010/automation/ops/warehouse/vegas/outbound
+    ProxyPassReverse /automation/ops/warehouse/vegas/outbound http://127.0.0.1:4010/automation/ops/warehouse/vegas/out>    ProxyPass /automation/ops/warehouse/mexico/outbound http://127.0.0.1:4010/automation/ops/warehouse/mexico/outbound
+    ProxyPassReverse /automation/ops/warehouse/mexico/outbound http://127.0.0.1:4010/automation/ops/warehouse/mexico/o>
+
+# Profitability Report
+
+ProxyPass /automation/ops/profitability-report http://127.0.0.1:4010/automation/ops/profitability-report
+ProxyPassReverse /automation/ops/profitability-report http://127.0.0.1:4010/automation/ops/profitability-report
+
+# (optional) redirect without trailing slash
+
+RedirectMatch 301 ^/automation/ops/profitability-report$ /automation/ops/profitability-report
+
+    # New Executive Dashboard
+    ProxyPass /automation/ops/warehouse-dashboard http://127.0.0.1:4010/automation/ops/warehouse-dashboard
+    ProxyPassReverse /automation/ops/warehouse-dashboard http://127.0.0.1:4010/automation/ops/warehouse-dashboard
+
+RewriteEngine On
+RewriteCond %{REQUEST_URI} ^/\_next/ [NC]
+RewriteCond %{HTTP:Referer} /automation/ops/warehouse [NC]
+RewriteRule ^/\_next/(.\*)$ http://127.0.0.1:4010/_next/$1 [P,L]
+
+RewriteCond %{REQUEST_URI} ^/\_next/ [NC]
+RewriteCond %{HTTP:Referer} /automation/ops/warehouse-dashboard [NC]
+RewriteRule ^/\_next/(.\*)$ http://127.0.0.1:4010/_next/$1 [P,L]
+
+RewriteCond %{REQUEST_URI} ^/\_next/ [NC]
+RewriteCond %{HTTP:Referer} /automation/ops/profitability-report [NC]
+RewriteRule ^/\_next/(.\*)$ http://127.0.0.1:4010/_next/$1 [P,L]
+
+# Ops dashboards root /_next/ requests -> 4011
+RewriteCond %{REQUEST_URI} ^/_next/ [NC]
+RewriteCond %{HTTP:Referer} /automation/ops/dashboards/ [NC]
+RewriteRule ^/_next/(.*)$ http://127.0.0.1:4011/_next/$1 [P,L]
+
+#ProxyPass        /_next/ http://127.0.0.1:3001/_next/
+#ProxyPassReverse /_next/ http://127.0.0.1:3001/_next/
+
+    # Warehouse dashboard static assets (if they serve from root /_next/ - more specific than main frontend)
+    # This only matches if NOT already matched by warehouse path proxies above
+ #   ProxyPass /_next/ http://127.0.0.1:4010/_next/
+#    ProxyPassReverse /_next/ http://127.0.0.1:4010/_next/
+    # Optional: logo
+    ProxyPass /automation/ops/warehouse/vegas/outbound/logo.jpeg http://127.0.0.1:4010/logo.jpeg
+    ProxyPassReverse /automation/ops/warehouse/vegas/outbound/logo.jpeg http://127.0.0.1:4010/logo.jpeg
+    ProxyPass /automation/ops/warehouse/mexico/outbound/logo.jpeg http://127.0.0.1:4010/logo.jpeg
+    ProxyPassReverse /automation/ops/warehouse/mexico/outbound/logo.jpeg http://127.0.0.1:4010/logo.jpeg
+
+
+    # Frontend routes (catch-all for main Next.js app - MUST be last)ProxyPass /_next/ !
+
+    ProxyPass / http://127.0.0.1:3001/
+    ProxyPassReverse / http://127.0.0.1:3001/
+</VirtualHost>
+
+
+<VirtualHost *:80>
+    ServerName om-dashboard.nysonik.com
+    ProxyPreserveHost On
+    ProxyPass        / http://127.0.0.1:3008/
+    ProxyPassReverse / http://127.0.0.1:3008/
+    ErrorLog /var/log/httpd/om-dashboard_error.log
+    CustomLog /var/log/httpd/om-dashboard_access.log combined
+</VirtualHost>

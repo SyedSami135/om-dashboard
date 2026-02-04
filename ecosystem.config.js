@@ -17,7 +17,7 @@ module.exports = {
     env_production: {
       NODE_ENV: 'production',
       PORT: process.env.PORT || 3008,
-      HOSTNAME: process.env.HOSTNAME || process.env.HOST || 'om-dashboard.duckdns.org'
+      HOSTNAME: process.env.HOSTNAME || process.env.HOST || 'om-dashboard.nysonik.com'
     }
   }]
 };
